@@ -12,8 +12,6 @@ services:
       - agent
     env_file:
       - ../.env
-    environment:
-      - GH_TOKEN=${GH_TOKEN}
     volumes:
       - ../config/config.json:/home/picoclaw/.picoclaw/config.json:ro
       - ../workspace:/home/picoclaw/.picoclaw/workspace
@@ -40,8 +38,6 @@ services:
       - gateway
     env_file:
       - ../.env
-    environment:
-      - GH_TOKEN=${GH_TOKEN}
     volumes:
       - ../config/config.json:/home/picoclaw/.picoclaw/config.json:ro
       - ../workspace:/home/picoclaw/.picoclaw/workspace

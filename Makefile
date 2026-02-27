@@ -1,4 +1,5 @@
-.PHONY: all build install uninstall clean help test
+.PHONY: all build install uninstall clean help test \
+        docker-up docker-down docker-restart docker-logs docker-build docker-clean docker-prune
 
 # Build variables
 BINARY_NAME=picoclaw
@@ -168,6 +169,40 @@ check: deps fmt vet test
 ## run: Build and run picoclaw
 run: build
 	@$(BUILD_DIR)/$(BINARY_NAME) $(ARGS)
+
+# ── Docker targets ──────────────────────────────────────────────────────────
+DOCKER_COMPOSE=docker compose -f docker/docker-compose.yml
+
+## docker-up: Build image and start gateway in background
+docker-up:
+	@$(DOCKER_COMPOSE) --profile gateway up -d --build
+
+## docker-down: Stop and remove gateway container
+docker-down:
+	@$(DOCKER_COMPOSE) --profile gateway down
+
+## docker-restart: Restart gateway container (no rebuild)
+docker-restart:
+	@$(DOCKER_COMPOSE) --profile gateway restart
+
+## docker-logs: Follow gateway logs (Ctrl-C to exit)
+docker-logs:
+	@$(DOCKER_COMPOSE) --profile gateway logs -f
+
+## docker-build: Rebuild image without starting
+docker-build:
+	@$(DOCKER_COMPOSE) --profile gateway build --no-cache
+
+## docker-clean: Remove stopped containers and dangling images
+docker-clean:
+	@docker container prune -f
+	@docker image prune -f
+	@echo "Cleaned stopped containers and dangling images"
+
+## docker-prune: Full cleanup — remove all unused images, volumes, networks
+docker-prune:
+	@docker system prune -af --volumes
+	@echo "Full Docker cleanup complete"
 
 ## help: Show this help message
 help:
