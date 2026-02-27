@@ -154,10 +154,8 @@ func CreateProviderFromConfig(cfg *config.ModelConfig) (LLMProvider, string, err
 		return NewCodexCliProvider(workspace), modelID, nil
 
 	case "github-copilot", "copilot":
+		// Empty api_base = auto-spawn mode (SDK finds 'copilot' binary in PATH)
 		apiBase := cfg.APIBase
-		if apiBase == "" {
-			apiBase = "localhost:4321"
-		}
 		connectMode := cfg.ConnectMode
 		if connectMode == "" {
 			connectMode = "grpc"

@@ -39,7 +39,16 @@ func NewAgentRegistry(
 		for i := range agentConfigs {
 			ac := &agentConfigs[i]
 			id := routing.NormalizeAgentID(ac.ID)
-			instance := NewAgentInstance(ac, &cfg.Agents.Defaults, cfg, provider)
+			// Use per-agent provider if agent's model maps to a model_list entry
+			agentProvider := provider
+			if ac.Model != nil && ac.Model.Primary != "" {
+				if modelCfg, err := cfg.GetModelConfig(ac.Model.Primary); err == nil {
+					if p, _, err := providers.CreateProviderFromConfig(modelCfg); err == nil {
+						agentProvider = p
+					}
+				}
+			}
+			instance := NewAgentInstance(ac, &cfg.Agents.Defaults, cfg, agentProvider)
 			registry.agents[id] = instance
 			logger.InfoCF("agent", "Registered agent",
 				map[string]any{

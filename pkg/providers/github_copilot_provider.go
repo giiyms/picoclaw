@@ -29,9 +29,11 @@ func NewGitHubCopilotProvider(uri string, connectMode string, model string) (*Gi
 		// TODO:
 		return nil, fmt.Errorf("stdio mode not implemented")
 	case "grpc":
-		client := copilot.NewClient(&copilot.ClientOptions{
-			CLIUrl: uri,
-		})
+		var opts *copilot.ClientOptions
+		if uri != "" {
+			opts = &copilot.ClientOptions{CLIUrl: uri}
+		}
+		client := copilot.NewClient(opts)
 		if err := client.Start(context.Background()); err != nil {
 			return nil, fmt.Errorf(
 				"can't connect to Github Copilot: %w; `https://github.com/github/copilot-sdk/blob/main/docs/getting-started.md#connecting-to-an-external-cli-server` for details",

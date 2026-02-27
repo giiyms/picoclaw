@@ -36,6 +36,7 @@ type SubagentManager struct {
 	hasMaxTokens   bool
 	hasTemperature bool
 	nextID         int
+	agentResolver  func(agentID string) (providers.LLMProvider, string, bool)
 }
 
 func NewSubagentManager(
@@ -63,6 +64,12 @@ func (sm *SubagentManager) SetLLMOptions(maxTokens int, temperature float64) {
 	sm.hasMaxTokens = true
 	sm.temperature = temperature
 	sm.hasTemperature = true
+}
+
+// SetAgentResolver sets a function to look up provider+model for a named agent.
+// When a spawn target agent_id matches, its dedicated provider is used instead of the default.
+func (sm *SubagentManager) SetAgentResolver(fn func(agentID string) (providers.LLMProvider, string, bool)) {
+	sm.agentResolver = fn
 }
 
 // SetTools sets the tool registry for subagent execution.
@@ -164,9 +171,19 @@ After completing the task, provide a clear summary of what was done.`
 		}
 	}
 
+	// If spawning a named agent, use its dedicated provider+model if available
+	resolvedProvider := sm.provider
+	resolvedModel := sm.defaultModel
+	if task.AgentID != "" && sm.agentResolver != nil {
+		if p, m, ok := sm.agentResolver(task.AgentID); ok {
+			resolvedProvider = p
+			resolvedModel = m
+		}
+	}
+
 	loopResult, err := RunToolLoop(ctx, ToolLoopConfig{
-		Provider:      sm.provider,
-		Model:         sm.defaultModel,
+		Provider:      resolvedProvider,
+		Model:         resolvedModel,
 		Tools:         tools,
 		MaxIterations: maxIter,
 		LLMOptions:    llmOptions,

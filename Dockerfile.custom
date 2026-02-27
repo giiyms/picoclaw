@@ -1,0 +1,61 @@
+# ============================================================
+# Stage 1: Build the picoclaw binary
+# ============================================================
+FROM golang:1.25-alpine AS builder
+
+RUN apk add --no-cache git make
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN make build
+
+# ============================================================
+# Stage 2: Runtime image with gh CLI + copilot extension
+# ============================================================
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates tzdata curl jq && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install gh CLI
+RUN ARCH=$(uname -m | sed 's/aarch64/arm64/;s/x86_64/amd64/') && \
+    VERSION=$(curl -sf https://api.github.com/repos/cli/cli/releases/latest | jq -r .tag_name | sed 's/v//') && \
+    curl -fL "https://github.com/cli/cli/releases/download/v${VERSION}/gh_${VERSION}_linux_${ARCH}.tar.gz" -o /tmp/gh.tar.gz && \
+    tar -xzf /tmp/gh.tar.gz -C /tmp && \
+    mv "/tmp/gh_${VERSION}_linux_${ARCH}/bin/gh" /usr/local/bin/gh && \
+    rm -rf /tmp/gh*
+
+# Install GitHub Copilot CLI binary (for copilot-sdk auto-spawn)
+RUN ARCH=$(uname -m | sed 's/aarch64/arm64/;s/x86_64/x64/') && \
+    VERSION=$(curl -sf https://api.github.com/repos/github/copilot-cli/releases/latest | jq -r .tag_name | sed 's/v//') && \
+    curl -fL "https://github.com/github/copilot-cli/releases/download/v${VERSION}/copilot-linux-${ARCH}.tar.gz" \
+         -o /tmp/copilot.tar.gz && \
+    tar -xzf /tmp/copilot.tar.gz -C /usr/local/bin && \
+    rm -f /tmp/copilot.tar.gz && \
+    chmod +x /usr/local/bin/copilot
+
+# Health check (wget from busybox-style not available; use curl)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -sf http://localhost:18790/health || exit 1
+
+# Copy picoclaw binary
+COPY --from=builder /src/build/picoclaw /usr/local/bin/picoclaw
+
+# Create non-root user
+RUN groupadd -g 1000 picoclaw && \
+    useradd -m -u 1000 -g picoclaw picoclaw
+
+USER picoclaw
+
+# Install gh-copilot extension (as picoclaw user)
+RUN gh extension install github/gh-copilot --force 2>/dev/null || true
+
+RUN /usr/local/bin/picoclaw onboard
+
+ENTRYPOINT ["picoclaw"]
+CMD ["gateway"]
