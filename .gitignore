@@ -38,6 +38,12 @@ ralph/
 .ralph/
 tasks/
 
+# Workspace runtime artifacts (logs, state, cron outputs)
+workspace/heartbeat.log
+workspace/HEARTBEAT.md
+workspace/state/
+workspace/cron/
+
 # Editors
 .vscode/
 .idea/
