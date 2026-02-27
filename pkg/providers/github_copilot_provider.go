@@ -17,6 +17,10 @@ type GitHubCopilotProvider struct {
 	session *copilot.Session
 
 	mu sync.Mutex
+
+	// multi-turn sessions: picoclaw session ID -> copilot Session
+	sessions    map[string]*copilot.Session
+	sessionNext int
 }
 
 func NewGitHubCopilotProvider(uri string, connectMode string, model string) (*GitHubCopilotProvider, error) {
@@ -55,6 +59,7 @@ func NewGitHubCopilotProvider(uri string, connectMode string, model string) (*Gi
 			connectMode: connectMode,
 			client:      client,
 			session:     session,
+			sessions:    make(map[string]*copilot.Session),
 		}, nil
 	default:
 		return nil, fmt.Errorf("unknown connect mode: %s", connectMode)
@@ -122,4 +127,64 @@ func (p *GitHubCopilotProvider) Chat(
 
 func (p *GitHubCopilotProvider) GetDefaultModel() string {
 	return "gpt-4.1"
+}
+
+// OpenSession creates a new multi-turn copilot session and returns its picoclaw ID.
+// Each session costs 1 GitHub Copilot premium credit; subsequent SendToSession calls are free.
+func (p *GitHubCopilotProvider) OpenSession(ctx context.Context) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.client == nil {
+		return "", fmt.Errorf("copilot provider closed")
+	}
+
+	sess, err := p.client.CreateSession(ctx, &copilot.SessionConfig{
+		Model: p.GetDefaultModel(),
+		Hooks: &copilot.SessionHooks{},
+	})
+	if err != nil {
+		return "", fmt.Errorf("create session: %w", err)
+	}
+
+	p.sessionNext++
+	id := fmt.Sprintf("cs-%d", p.sessionNext)
+	p.sessions[id] = sess
+	return id, nil
+}
+
+// SendToSession sends a message to an open multi-turn session and returns the response.
+// This does NOT cost an additional credit — it reuses the existing session.
+func (p *GitHubCopilotProvider) SendToSession(ctx context.Context, sessionID, prompt string) (string, error) {
+	p.mu.Lock()
+	sess, ok := p.sessions[sessionID]
+	p.mu.Unlock()
+
+	if !ok {
+		return "", fmt.Errorf("session %q not found (use copilot_start first)", sessionID)
+	}
+
+	resp, err := sess.SendAndWait(ctx, copilot.MessageOptions{Prompt: prompt})
+	if err != nil {
+		return "", fmt.Errorf("send to session %s: %w", sessionID, err)
+	}
+	if resp == nil || resp.Data.Content == nil {
+		return "", fmt.Errorf("empty response from session %s", sessionID)
+	}
+	return *resp.Data.Content, nil
+}
+
+// CloseSession destroys an open multi-turn session and frees its resources.
+func (p *GitHubCopilotProvider) CloseSession(ctx context.Context, sessionID string) error {
+	p.mu.Lock()
+	sess, ok := p.sessions[sessionID]
+	if ok {
+		delete(p.sessions, sessionID)
+	}
+	p.mu.Unlock()
+
+	if !ok {
+		return fmt.Errorf("session %q not found", sessionID)
+	}
+	return sess.Destroy()
 }

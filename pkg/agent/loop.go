@@ -155,6 +155,16 @@ func registerSharedTools(
 			return registry.CanSpawnSubagent(currentAgentID, targetAgentID)
 		})
 		agent.Tools.Register(spawnTool)
+
+		// Copilot multi-turn session tools — registered on every agent so any
+		// agent can open/steer a Copilot session directly (1 credit per session).
+		if copilotInst, ok := registry.GetAgent("copilot"); ok {
+			if copilotHost, ok := copilotInst.Provider.(tools.CopilotSessionHost); ok {
+				agent.Tools.Register(tools.NewCopilotStartTool(copilotHost))
+				agent.Tools.Register(tools.NewCopilotSendTool(copilotHost))
+				agent.Tools.Register(tools.NewCopilotStopTool(copilotHost))
+			}
+		}
 	}
 }
 
